@@ -3,6 +3,8 @@ from typing import List, Dict, Tuple
 from enum import Enum
 import matplotlib.pyplot as plt
 import random
+import pandas as pd
+from scipy import stats
 
 
 # Define card order
@@ -63,23 +65,26 @@ class Player:
             weighed_ave_possibility * WINNING_SCORE
             + (1 - weighed_ave_possibility) * LOSE_CALL_SCORE
         )
+        print(f"weighed: {weighed_ave_possibility}, expected: {expected_value}")
         if expected_value > 0:
             return "Call"
         else:
             return "Fold"
 
     def calc_weighed_ave_possibility(self, opponents_info: Dict[Player, bool]):
-        expected_value = 0
+        expected_value: float = 0
+
         for opponent, is_max in opponents_info.items():
             expected_value += is_max * opponent.honesty
+
         expected_value /= len(opponents_info)
         return expected_value
 
 
 class Deck:
     def __init__(self):
-        ENOUGH_NUMBER = 10**5
-        self.cards = [Card(value) for value in card_order * ENOUGH_NUMBER]
+        ENOUGH_CARD_SET = 10**3
+        self.cards = [Card(value) for value in card_order * ENOUGH_CARD_SET]
 
     def shuffle(self):
         random.shuffle(self.cards)
@@ -120,19 +125,19 @@ class IndianPokerGame:
         }
 
         # calc scores
-        max_value = max(
-            player.card.value for player in self.players if decisions[player] == "Call"
-        )
+        called_players = [p for p in self.players if decisions[p] == "Call"]
+        max_value = 0
+        if len(called_players) > 0:
+            max_value = max(player.card.value for player in called_players)
+
         for player, decision in decisions.items():
-            print("a", player.score)
             if decision == "Fold":
-                player.score -= LOSE_FOLD_SCORE
+                player.score += LOSE_FOLD_SCORE
             elif decision == "Call":
                 if player.card.value == max_value:
                     player.score += WINNING_SCORE
                 else:
-                    player.score -= LOSE_CALL_SCORE
-            print("b", player.score)
+                    player.score += LOSE_CALL_SCORE
 
     def play_game(self, num_rounds: int):
         for _ in range(num_rounds):
@@ -154,7 +159,7 @@ def visualize(scores: Dict[Player, int]):
     rational_scores = []
     random_scores = []
     for player, score in scores.items():
-        print(f"player honesty: {player.honesty}, score: {score}")
+        print(f"type,{player.player_type} honesty: {player.honesty}, score: {score}")
         if player.player_type == PlayerType.Rational:
             rational_scores.append(score)
         else:
@@ -166,6 +171,42 @@ def visualize(scores: Dict[Player, int]):
     plt.show()
 
 
+def split_scores(scores: Dict[Player, int]) -> Tuple[List[int], List[int]]:
+    rational_scores = []
+    random_scores = []
+    for player, score in scores.items():
+        if player.player_type == PlayerType.Rational:
+            rational_scores.append(score)
+        else:
+            random_scores.append(score)
+    return rational_scores, random_scores
+
+
+def bar_graph(title: str, rational_scores: List[int], random_scores: List[int]):
+    plt.title(title + " Rational")
+    plt.hist(rational_scores, bins=10)
+    plt.show()
+    plt.title(title + " Random")
+    plt.hist(random_scores, bins=10)
+    plt.show()
+
+
+def get_average(
+    rational_scores: List[int], random_scores: List[int]
+) -> Tuple[float, float]:
+    return sum(rational_scores) / len(rational_scores), sum(random_scores) / len(
+        random_scores
+    )
+
+
 if __name__ == "__main__":
-    scores = game(40, 1)
-    visualize(scores)
+    TITLE = "5 x 5"
+    scores = game(5, 5)
+    rational_scores, random_scores = split_scores(scores)
+    avarage = get_average(rational_scores, random_scores)
+    print(f"rational: {avarage[0]}, random: {avarage[1]}")
+    # visualize(scores)
+    bar_graph(TITLE, rational_scores, random_scores)
+    # t-test
+    t, p = stats.ttest_ind(rational_scores, random_scores, equal_var=False)
+    print(f"t: {t}, p: {p}")
